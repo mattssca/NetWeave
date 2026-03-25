@@ -29,8 +29,7 @@
 #'
 #' @seealso \code{\link{create_and_expand_network}}, \code{\link{filter_network_nodes}}
 #'
-#' @importFrom igraph graph_from_data_frame degree betweenness closeness
-#'   eigen_centrality hits_scores cluster_louvain membership
+#' @import igraph
 #'
 #' @export
 recalculate_network_metrics <- function(node_metrics = NULL,

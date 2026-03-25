@@ -63,10 +63,8 @@
 #' or when \code{biomaRt} is called to convert Ensembl peptide IDs to gene
 #' symbols.
 #'
+#' @import STRINGdb igraph
 #' @importFrom biomaRt useMart getBM
-#' @importFrom igraph graph_from_data_frame induced_subgraph degree
-#'   betweenness closeness eigen_centrality hits_scores cluster_louvain
-#'   membership as_data_frame
 #' @importFrom utils capture.output
 #'
 #' @export

@@ -28,8 +28,6 @@
 #' intersection is empty for a given subtype, a warning is issued and the column
 #' is filled with \code{NA}.
 #'
-#' @importFrom stats rowMeans
-#'
 #' @export
 #' 
 add_subtype_expression = function(this_subtype_vector = NULL,

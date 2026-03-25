@@ -56,7 +56,7 @@
 #' multiple HPA cell type rows), only the first occurrence of each gene is
 #' retained and a warning is issued.
 #'
-#' @importFrom igraph graph_from_data_frame set_vertex_attr write_graph V
+#' @import igraph
 #' @importFrom utils write.table
 #'
 #' @export

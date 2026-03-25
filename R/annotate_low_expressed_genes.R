@@ -31,7 +31,7 @@
 #' distribution of mean expression values across matched network genes only.
 #' Genes at exactly the cutoff value are included in the low-expression set.
 #'
-#' @importFrom stats rowMeans quantile
+#' @importFrom stats quantile
 #'
 #' @export
 #' 

@@ -1,0 +1,298 @@
+---
+title: "ERBB2 Network Analysis with NetWeave"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{ERBB2 Network Analysis with NetWeave}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = FALSE
+)
+```
+
+## Overview
+
+This vignette demonstrates a complete NetWeave analysis using the bundled bladder cancer expression dataset from Sjodahl et al. (2017). We build a STRING protein-protein interaction network anchored on **ERBB2**, annotate genes with subtype expression profiles, Human Protein Atlas (HPA) protein evidence, and network centrality metrics, then visualise the results.
+
+The same workflow can be run step-by-step (shown below) or via the `run_netweave()` convenience wrapper.
+
+---
+
+## Setup
+
+```{r library}
+library(NetWeave)
+```
+
+The bundled datasets are available immediately after loading the package:
+
+```{r data}
+# Expression matrix (genes x samples)
+data(sjodahl_2017)
+
+# Named subtype vector (sample IDs → subtype labels)
+data(sjodahl_2017_subtypes)
+
+# Independent expression cohort for low-expression thresholding
+data(usq_expr)
+
+# HPA reference tables
+data(hpa_normal_data)
+data(hpa_cancer_data)
+```
+
+---
+
+## Step-by-Step Pipeline
+
+### Step 1 — Retrieve pathway genes
+
+Fetch all genes in the Reactome "Signaling by ERBB2" pathway. The function
+queries the bundled `Ensembl2Reactome` object and returns a character vector
+of HGNC gene symbols.
+
+```{r step1}
+erbb2_pathway <- get_pathway_genes(
+  this_pathway = "Signaling by ERBB2",
+  verbose      = TRUE
+)
+```
+
+### Step 2 — Build and expand the STRING network
+
+Starting from the pathway genes, `create_and_expand_network()` maps genes to
+STRING protein IDs, retrieves first-degree neighbours present in the expression
+data, selects the top `max_added_genes` by interaction degree, and computes
+per-node centrality metrics.
+
+Pre-downloaded STRING files are used automatically when `string_data_dir`
+points to a directory containing the required `.txt.gz` flat files. A score
+threshold of 900 retains only high-confidence interactions.
+
+```{r step2}
+erbb2_network <- create_and_expand_network(
+  expr_data              = sjodahl_2017,
+  seed_gene              = "ERBB2",
+  pathway_genes          = erbb2_pathway,
+  max_added_genes        = 20,
+  string_score_threshold = 900,
+  verbose                = TRUE,
+  genes_blacklist        = NULL,
+  string_data_dir        = "data/string_db/"
+)
+
+# The result is a list with two elements:
+edge_data    <- erbb2_network$edge_data    # data.frame of network edges
+node_metrics <- erbb2_network$node_metrics # data.frame of per-node metrics
+```
+
+### Step 3 — Add per-subtype mean expression
+
+Appends `mean_expr_<subtype>` columns to `node_metrics`. The Sjodahl 2017
+cohort contains five molecular subtypes; we specify their display order
+explicitly.
+
+```{r step3}
+annotated_node_metrics <- add_subtype_expression(
+  this_subtype_vector = sjodahl_2017_subtypes,
+  expr_data           = sjodahl_2017,
+  node_metrics        = erbb2_network$node_metrics,
+  subtype_order       = c("Uro", "GU", "BaSq", "Mes", "ScNE")
+)
+```
+
+### Step 4 — Flag low-expressed genes
+
+Uses a separate cohort (`usq_expr`) to threshold low expression. Genes whose
+mean expression falls below the 25th percentile of network genes are flagged
+with `is_low_expression = TRUE`.
+
+```{r step4}
+annotated_node_metrics <- annotate_low_expressed_genes(
+  node_metrics       = annotated_node_metrics,
+  expr_data          = usq_expr,
+  low_expr_threshold = 0.25
+)
+```
+
+### Step 5 — ANOVA for subtype-differential expression
+
+Runs a one-way ANOVA for each gene testing whether mean expression differs
+across subtypes. Bonferroni correction is applied over all network genes.
+
+```{r step5}
+annotated_node_metrics <- run_anova_subtype_expression(
+  node_metrics        = annotated_node_metrics,
+  expr_data           = sjodahl_2017,
+  this_subtype_vector = sjodahl_2017_subtypes,
+  sig_threshold       = 0.05
+)
+```
+
+### Step 6 — Rank subtype expression
+
+For each gene, ranks its mean expression across subtypes (rank 1 = highest
+expression), appending `rank_<subtype>` columns.
+
+```{r step6}
+annotated_node_metrics <- rank_subtype_expression(
+  node_metrics = annotated_node_metrics
+)
+```
+
+### Step 7 — Add Human Protein Atlas annotations
+
+Joins raw HPA normal-tissue IHC and cancer staining data for the bladder /
+urothelial cancer context.
+
+```{r step7}
+annotated_node_metrics <- add_hpa_annotations(
+  node_metrics       = annotated_node_metrics,
+  normal_hpa         = hpa_normal_data,
+  cancer_hpa         = hpa_cancer_data,
+  this_tissue_normal = "Urinary bladder",
+  this_tissue_cancer = "urothelial cancer"
+)
+```
+
+### Step 8 — Derive HPA expression metrics
+
+Converts the raw HPA fields into interpretable classifications
+(`hpa_expression_pattern`, `hpa_passes_filter`, `hpa_therapeutic_target`, etc.).
+
+```{r step8}
+annotated_node_metrics <- derive_hpa_metrics(
+  node_metrics = annotated_node_metrics
+)
+```
+
+### Step 9 — Filter network nodes
+
+Retains only genes that are expressed in bladder tissue (normal or cancer),
+are not low-expressed, and show statistically significant subtype-differential
+expression.
+
+```{r step9}
+annotated_node_metrics <- filter_network_nodes(
+  node_metrics         = annotated_node_metrics,
+  tissue_filter        = "either",
+  remove_low_expressed = TRUE,
+  filter_anova_sig     = TRUE
+)
+```
+
+### Step 10 — Recalculate network metrics on the filtered subnetwork
+
+After filtering, centrality values from step 2 reflect the full pre-filter
+network. This step rebuilds the graph from the surviving nodes and recomputes
+degree, betweenness, closeness, eigenvector centrality, HITS hub score, and
+Louvain community membership.
+
+```{r step10}
+annotated_node_metrics <- recalculate_network_metrics(
+  node_metrics = annotated_node_metrics,
+  edge_data    = erbb2_network$edge_data
+)
+```
+
+### Step 11 — Calculate subtype-specific hub scores
+
+Combines weighted centrality (degree, betweenness, eigenvector) with a
+subtype specificity score to produce `<subtype>_hub_score` columns — positive
+values indicate high-centrality genes upregulated in that subtype.
+
+```{r step11}
+annotated_node_metrics <- calculate_subtype_hub_scores(
+  node_metrics = annotated_node_metrics
+)
+```
+
+---
+
+## Visualisation
+
+### Subtype hub score heatmaps
+
+`plot_subtype_hub_scores()` returns a `ComplexHeatmap` object; use `draw()` to
+render it. Inspect upregulated and downregulated hub genes separately.
+
+```{r heatmaps, fig.width = 10, fig.height = 6}
+hm_up   <- plot_subtype_hub_scores(annotated_node_metrics, hub_direction = "up")
+hm_down <- plot_subtype_hub_scores(annotated_node_metrics, hub_direction = "down")
+
+draw(hm_up)
+draw(hm_down)
+```
+
+### Network plot
+
+Draw the filtered network as a static `ggraph` plot, colouring nodes by their
+origin (seed / pathway / extended set) and labelling all nodes.
+
+```{r network, fig.width = 10, fig.height = 10}
+plot_network(
+  node_metrics = annotated_node_metrics,
+  edge_data    = erbb2_network$edge_data,
+  interactive  = FALSE,
+  title        = "ERBB2 Network",
+  color_by     = "origin",
+  label_nodes  = "all"
+)
+```
+
+### Export to Cytoscape
+
+Write node-attribute and edge TSV files plus a GraphML file for import into
+Cytoscape:
+
+```{r cytoscape}
+create_cytoscape_objects(
+  node_metrics = annotated_node_metrics,
+  edge_data    = erbb2_network$edge_data,
+  out_dir      = "output/",
+  file_prefix  = "erbb2_network"
+)
+```
+
+---
+
+## Using the `run_netweave()` wrapper
+
+All eleven steps above can be run in a single call:
+
+```{r wrapper}
+result <- run_netweave(
+  seed_gene          = "ERBB2",
+  pathway_name       = "Signaling by ERBB2",
+  expr_data          = sjodahl_2017,
+  subtype_vector     = sjodahl_2017_subtypes,
+  low_expr_data      = usq_expr,
+  normal_hpa         = hpa_normal_data,
+  cancer_hpa         = hpa_cancer_data,
+  this_tissue_normal = "Urinary bladder",
+  this_tissue_cancer = "urothelial cancer",
+  subtype_order      = c("Uro", "GU", "BaSq", "Mes", "ScNE"),
+  string_data_dir    = "data/string_db/"
+)
+
+# Access results
+final_nodes <- result$node_metrics
+edge_data   <- result$edge_data
+pathway     <- result$pathway_genes
+```
+
+The wrapper accepts the same filter and scoring parameters as the individual
+functions; see `?run_netweave` for the full argument list.
+
+---
+
+## Session Info
+
+```{r session}
+sessionInfo()
+```

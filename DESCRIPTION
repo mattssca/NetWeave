@@ -23,7 +23,10 @@ Imports:
     tibble,
     stats,
     utils
+VignetteBuilder: knitr
 Suggests:
+    knitr,
+    rmarkdown,
     clusterProfiler,
     org.Hs.eg.db,
     ComplexHeatmap,
