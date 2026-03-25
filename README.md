@@ -107,7 +107,7 @@ annotated_node_metrics <- add_subtype_expression(
 # 4. Flag low-expressed genes (uses independent cohort)
 annotated_node_metrics <- annotate_low_expressed_genes(
   node_metrics       = annotated_node_metrics,
-  expr_data          = usq_expr,
+  expr_data          = sjodahl_2017,
   low_expr_threshold = 0.25
 )
 

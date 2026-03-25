@@ -38,9 +38,6 @@ data(sjodahl_2017)
 # Named subtype vector (sample IDs → subtype labels)
 data(sjodahl_2017_subtypes)
 
-# Independent expression cohort for low-expression thresholding
-data(usq_expr)
-
 # HPA reference tables
 data(hpa_normal_data)
 data(hpa_cancer_data)
@@ -108,14 +105,13 @@ annotated_node_metrics <- add_subtype_expression(
 
 ### Step 4 — Flag low-expressed genes
 
-Uses a separate cohort (`usq_expr`) to threshold low expression. Genes whose
-mean expression falls below the 25th percentile of network genes are flagged
+Genes whose mean expression falls below the 25th percentile of network genes are flagged
 with `is_low_expression = TRUE`.
 
 ```{r step4}
 annotated_node_metrics <- annotate_low_expressed_genes(
   node_metrics       = annotated_node_metrics,
-  expr_data          = usq_expr,
+  expr_data          = sjodahl_2017,
   low_expr_threshold = 0.25
 )
 ```
