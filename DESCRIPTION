@@ -1,0 +1,41 @@
+Package: NetWeave
+Title: Protein Interaction Network Analysis with Expression and Annotation Integration
+Version: 0.1.0
+Authors@R: 
+   person("Adam", "Mattsson", , "adam.mattsson@med.lu.se", role = c("aut", "cre"))
+Description: A modular framework for building, annotating, and visualising
+    gene interaction networks from STRING protein-protein interaction data.
+    Starting from pathway seed genes, NetWeave expands the network, integrates
+    subtype-specific expression data, Human Protein Atlas annotations, and
+    computes network centrality metrics and subtype-specific hub scores.
+    Outputs include annotated node tables, Cytoscape-ready files, and
+    publication-quality network visualisations.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+biocViews:
+Imports:
+    dplyr (>= 1.1.0),
+    igraph (>= 1.5.0),
+    biomaRt,
+    STRINGdb,
+    tibble,
+    stats,
+    utils
+Suggests:
+    clusterProfiler,
+    org.Hs.eg.db,
+    ComplexHeatmap,
+    circlize,
+    grid,
+    ggraph,
+    ggplot2,
+    ggrepel,
+    visNetwork,
+    BiocManager,
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
+Depends: 
+    R (>= 2.10)
+LazyData: true

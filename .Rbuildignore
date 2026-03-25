@@ -1,0 +1,7 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+^data/raw$
+^data/string_db$
+^\.git$
+^\.gitignore$
+^data-raw$

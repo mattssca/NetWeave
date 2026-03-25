@@ -1,0 +1,51 @@
+#' NetWeave: Protein Interaction Network Analysis with Expression and Annotation Integration
+#'
+#' A modular framework for building, annotating, and visualising gene interaction
+#' networks from STRING protein-protein interaction data. Starting from pathway
+#' seed genes, NetWeave expands the network, integrates subtype-specific
+#' expression data, Human Protein Atlas (HPA) annotations, and computes network
+#' centrality metrics and subtype-specific hub scores.
+#'
+#' @section Workflow:
+#' The typical analysis pipeline proceeds in the following order:
+#' \enumerate{
+#'   \item \code{\link{get_pathway_genes}} — Retrieve seed genes for a pathway
+#'     of interest from Ensembl/Reactome.
+#'   \item \code{\link{create_and_expand_network}} — Build and expand a STRING
+#'     PPI network, returning \code{edge_data} and \code{node_metrics}.
+#'   \item \code{\link{add_subtype_expression}} — Compute per-subtype mean
+#'     expression and append to \code{node_metrics}.
+#'   \item \code{\link{annotate_low_expressed_genes}} — Flag low-expressed genes
+#'     by percentile or absolute threshold.
+#'   \item \code{\link{run_anova_subtype_expression}} — Test for differential
+#'     expression across subtypes (ANOVA + Bonferroni + eta-squared).
+#'   \item \code{\link{rank_subtype_expression}} — Rank each gene across subtypes
+#'     by mean expression.
+#'   \item \code{\link{add_hpa_annotations}} — Join raw Human Protein Atlas
+#'     normal tissue and cancer expression fields.
+#'   \item \code{\link{derive_hpa_metrics}} — Compute derived HPA expression
+#'     classifications and prioritisation flags.
+#'   \item \code{\link{filter_network_nodes}} — Filter nodes by tissue
+#'     specificity, low expression, and ANOVA significance.
+#'   \item \code{\link{recalculate_network_metrics}} — Recompute centrality
+#'     metrics on the filtered subnetwork.
+#'   \item \code{\link{run_go_enrichment}} — GO over-representation analysis
+#'     per Louvain community.
+#'   \item \code{\link{calculate_subtype_hub_scores}} — Compute subtype-specific
+#'     hub scores from centrality × expression specificity.
+#'   \item \code{\link{plot_subtype_hub_scores}} — Heatmap of subtype hub scores
+#'     via ComplexHeatmap.
+#'   \item \code{\link{plot_network}} — Draw the network in R (static ggraph or
+#'     interactive visNetwork).
+#'   \item \code{\link{create_cytoscape_objects}} — Export annotated node/edge
+#'     tables and GraphML for Cytoscape.
+#' }
+#'
+#' @section Helper functions:
+#' \itemize{
+#'   \item \code{\link{get_hpa_tissues}} — List available tissues or cancer
+#'     types in an HPA data frame.
+#' }
+#'
+#' @keywords internal
+"_PACKAGE"
