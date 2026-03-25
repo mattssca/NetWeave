@@ -10,6 +10,11 @@
 #'   (e.g. \code{"ERBB2"}).
 #' @param pathway_name A character string passed to \code{get_pathway_genes()}
 #'   as \code{this_pathway}. Can be a Reactome pathway name or gene symbol.
+#'   Ignored when \code{gene_list} is supplied.
+#' @param gene_list An optional character vector of HGNC gene symbols. When
+#'   provided, the Reactome lookup in step 1 is bypassed and this vector is
+#'   used as the seed gene set directly. Takes precedence over
+#'   \code{pathway_name}.
 #' @param expr_data A numeric matrix of expression values (genes x samples) used
 #'   for network construction, subtype expression, and ANOVA steps.
 #' @param subtype_vector A named character vector mapping sample IDs to subtype
@@ -86,7 +91,8 @@
 #'
 #' @export
 run_netweave <- function(seed_gene,
-                         pathway_name,
+                         pathway_name       = NULL,
+                         gene_list          = NULL,
                          expr_data,
                          subtype_vector,
                          normal_hpa,
@@ -115,7 +121,8 @@ run_netweave <- function(seed_gene,
   # step 1 - get pathway genes
   if (verbose) message("=== Step 1: Retrieving pathway genes ===")
   pathway_genes <- get_pathway_genes(this_pathway = pathway_name,
-                                     verbose = verbose)
+                                     gene_list    = gene_list,
+                                     verbose      = verbose)
   
   # step 2 - create and expand network
   if (verbose) message("=== Step 2: Building network ===")

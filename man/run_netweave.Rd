@@ -6,7 +6,8 @@
 \usage{
 run_netweave(
   seed_gene,
-  pathway_name,
+  pathway_name = NULL,
+  gene_list = NULL,
   expr_data,
   subtype_vector,
   normal_hpa,
@@ -36,7 +37,13 @@ run_netweave(
 (e.g. \code{"ERBB2"}).}
 
 \item{pathway_name}{A character string passed to \code{get_pathway_genes()}
-as \code{this_pathway}. Can be a Reactome pathway name or gene symbol.}
+as \code{this_pathway}. Can be a Reactome pathway name or gene symbol.
+Ignored when \code{gene_list} is supplied.}
+
+\item{gene_list}{An optional character vector of HGNC gene symbols. When
+provided, the Reactome lookup in step 1 is bypassed and this vector is
+used as the seed gene set directly. Takes precedence over
+\code{pathway_name}.}
 
 \item{expr_data}{A numeric matrix of expression values (genes x samples) used
 for network construction, subtype expression, and ANOVA steps.}

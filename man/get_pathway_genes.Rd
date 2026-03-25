@@ -6,6 +6,7 @@
 \usage{
 get_pathway_genes(
   this_pathway = NULL,
+  gene_list = NULL,
   verbose = FALSE,
   export_data = FALSE,
   out_path = NULL
@@ -15,7 +16,12 @@ get_pathway_genes(
 \item{this_pathway}{A single character string specifying either a Reactome
 pathway name (exact or partial match, case-insensitive) or an HGNC gene
 symbol. If a gene symbol is provided, all Reactome pathways containing
-that gene are returned.}
+that gene are returned. Ignored when \code{gene_list} is supplied.}
+
+\item{gene_list}{An optional character vector of HGNC gene symbols. When
+provided, the Reactome lookup is skipped entirely and this vector is
+returned (sorted, unique, empty strings removed) as the pathway gene set.
+Takes precedence over \code{this_pathway}.}
 
 \item{verbose}{Logical. If \code{TRUE}, progress and match messages are
 printed. Defaults to \code{FALSE}.}
@@ -40,10 +46,16 @@ exact pathway name, partial pathway name, then gene symbol lookup via
 \code{biomaRt}.
 }
 \details{
-The function requires the \code{Ensembl2Reactome} data frame to exist in
-the global environment with at least the columns \code{pathway_name} and
-\code{gene_id} (Ensembl IDs). This object is typically loaded via
-\code{data/data.R}.
+Alternatively, supply a pre-defined gene list via \code{gene_list} to
+bypass Reactome entirely.
+
+When \code{gene_list} is supplied it takes precedence and the function
+returns immediately without touching Reactome or \code{biomaRt}.
+
+Otherwise, the function requires the \code{Ensembl2Reactome} data frame to
+exist in the global environment with at least the columns
+\code{pathway_name} and \code{gene_id} (Ensembl IDs). This object is
+typically loaded via \code{data(Ensembl2Reactome)}.
 
 Matching proceeds as follows:
 \enumerate{
