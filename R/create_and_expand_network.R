@@ -64,7 +64,7 @@
 #' symbols.
 #'
 #' @import STRINGdb igraph
-#' @importFrom biomaRt useMart getBM
+#' @importFrom biomaRt useEnsembl getBM
 #' @importFrom utils capture.output
 #'
 #' @export
@@ -160,7 +160,7 @@ create_and_expand_network <- function(expr_data,
   if(length(neighbors) == 0) stop("No valid STRING neighbor IDs...")
   
   # convert neighbour STRING IDs to gene symbols via biomaRt
-  mart <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+  mart <- useEnsembl("ensembl", dataset = "hsapiens_gene_ensembl", mirror = "useast")
   neighbor_peptides <- sub("9606\\.", "", neighbors)
   
   mapping <- getBM(attributes = c("ensembl_peptide_id", "external_gene_name"),

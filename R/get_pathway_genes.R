@@ -54,7 +54,7 @@
 #' (partial/gene-symbol search paths).
 #'
 #' @importFrom dplyr filter
-#' @importFrom biomaRt useMart getBM
+#' @importFrom biomaRt useEnsembl getBM
 #'
 #' @export
 get_pathway_genes = function(this_pathway = NULL,
@@ -122,7 +122,7 @@ get_pathway_genes = function(this_pathway = NULL,
       message("  -> Searching as gene name...")
     }
     
-    mart <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+    mart <- useEnsembl("ensembl", dataset = "hsapiens_gene_ensembl", mirror = "useast")
     
     gene_ensembl <- getBM(attributes = c("ensembl_gene_id", "hgnc_symbol"),
                           filters = "hgnc_symbol",
@@ -145,7 +145,7 @@ get_pathway_genes = function(this_pathway = NULL,
                       this_pathway, length(unique(pathway_all$pathway_name))))
     }
   } else {
-    mart <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+    mart <- useEnsembl("ensembl", dataset = "hsapiens_gene_ensembl", mirror = "useast")
   }
   
   if(verbose && length(unique(pathway_all$pathway_name)) > 1){
