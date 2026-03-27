@@ -132,6 +132,8 @@ calculate_subtype_hub_scores <- function(node_metrics = NULL,
     betweenness_weight * norm_01(node_metrics$betweenness) +
     eigenvector_weight * norm_01(node_metrics$eigenvector)
   
+  node_metrics[["centrality_score"]] <- centrality_score
+  
   # compute global cross-subtype mean and sd per gene
   expr_matrix      <- as.matrix(node_metrics[, expr_cols, drop = FALSE])
   global_mean_expr <- rowMeans(expr_matrix, na.rm = TRUE)

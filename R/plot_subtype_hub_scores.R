@@ -7,8 +7,9 @@
 #' @param node_metrics A data frame of network node metrics containing
 #'   \code{<subtype>_hub_score} columns as produced by
 #'   \code{calculate_subtype_hub_scores()}. Must also contain a \code{name}
-#'   column. An \code{origin} column is optional but, if present, seed genes
-#'   (\code{origin == "seed"}) are highlighted in red.
+#'   column. An \code{origin} column is optional but, if present, gene names
+#'   are coloured by origin: \code{"seed"} = red, \code{"pathway"} = green,
+#'   \code{"extended set"} = blue.
 #' @param top_n Integer. Number of genes to display, selected by the highest
 #'   (or lowest, when \code{hub_direction = "down"}) hub score across all
 #'   subtypes. Defaults to \code{30}.
@@ -50,7 +51,7 @@
 #'
 #' @seealso \code{\link{calculate_subtype_hub_scores}}
 #'
-#' @importFrom ComplexHeatmap Heatmap draw
+#' @importFrom ComplexHeatmap Heatmap draw Legend
 #' @importFrom circlize colorRamp2
 #' @importFrom grid gpar
 #' @importFrom tibble column_to_rownames
@@ -125,11 +126,23 @@ plot_subtype_hub_scores <- function(node_metrics = NULL,
   hub_matrix           <- t(hub_matrix)
   rownames(hub_matrix) <- subtypes
   
-  # gene name colours: seed genes in red if origin column exists
+  # gene name colours: colour by origin if column exists
   if("origin" %in% colnames(top_genes)){
-    gene_name_colours <- ifelse(top_genes$origin == "seed", "red", "black")
+    origin_colour_map <- c("seed" = "#CB0404", "pathway" = "#FF9F00", "extended set" = "#309898")
+    gene_name_colours <- origin_colour_map[top_genes$origin]
+    gene_name_colours[is.na(gene_name_colours)] <- "black"
+    present_origins   <- intersect(names(origin_colour_map), unique(top_genes$origin))
+    origin_legend     <- ComplexHeatmap::Legend(
+      labels     = present_origins,
+      legend_gp  = grid::gpar(fill = origin_colour_map[present_origins]),
+      title      = "Gene Origin",
+      type       = "points",
+      pch        = NA_integer_,
+      background = origin_colour_map[present_origins]
+    )
   } else {
     gene_name_colours <- rep("black", ncol(hub_matrix))
+    origin_legend     <- NULL
   }
   names(gene_name_colours) <- colnames(hub_matrix)
   
@@ -194,7 +207,7 @@ plot_subtype_hub_scores <- function(node_metrics = NULL,
     rect_gp               = grid::gpar(col = "black", lwd = 2),
     row_names_side        = "left",
     row_names_gp          = grid::gpar(fontsize = fontsize_row),
-    column_names_gp       = grid::gpar(fontsize = fontsize_col, col = gene_name_colours),
+    column_names_gp       = grid::gpar(fontsize = fontsize_col, col = gene_name_colours, fontface = "bold"),
     column_title          = title,
     heatmap_legend_param  = legend_param
   )
@@ -202,11 +215,11 @@ plot_subtype_hub_scores <- function(node_metrics = NULL,
   # save to file if requested
   if(!is.null(output_file)){
     pdf(output_file, width = width, height = height)
-    ComplexHeatmap::draw(ht)
+    ComplexHeatmap::draw(ht, annotation_legend_list = if(!is.null(origin_legend)) list(origin_legend))
     dev.off()
     if(verbose) message(sprintf("  -> Heatmap saved to: %s", output_file))
   } else {
-    ComplexHeatmap::draw(ht)
+    ComplexHeatmap::draw(ht, annotation_legend_list = if(!is.null(origin_legend)) list(origin_legend))
   }
   
   invisible(ht)
