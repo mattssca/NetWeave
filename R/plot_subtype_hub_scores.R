@@ -8,19 +8,33 @@
 #'   \code{<subtype>_hub_score} columns as produced by
 #'   \code{calculate_subtype_hub_scores()}. Must also contain a \code{name}
 #'   column. An \code{origin} column is optional but, if present, gene names
-#'   are coloured by origin: \code{"seed"} = red, \code{"pathway"} = green,
-#'   \code{"extended set"} = blue.
-#' @param top_n Integer. Number of genes to display, selected by the highest
-#'   (or lowest, when \code{hub_direction = "down"}) hub score across all
-#'   subtypes. Defaults to \code{30}.
+#'   are coloured by origin: \code{"seed"} = red, \code{"pathway"} = orange,
+#'   \code{"extended set"} = teal.
+#' @param top_n Integer. Number of genes to display. Which genes are selected
+#'   is controlled by \code{select_by}. Defaults to \code{30}.
 #' @param hub_direction Character string. One of \code{"up"} (default) to show
 #'   the genes with the highest positive hub scores, or \code{"down"} to show
 #'   genes with the most negative hub scores (downregulated high-centrality
 #'   genes).
-#' @param order_by Character string controlling column (gene) ordering. One of:
+#' @param select_by Character string controlling which metric is used to pick
+#'   the \code{top_n} genes. One of:
+#'   \describe{
+#'     \item{\code{"hub_score"}}{(Default) Select genes with the highest
+#'       maximum hub score across subtypes — the most active overall hubs.}
+#'     \item{\code{"delta"}}{Select genes with the largest difference between
+#'       their top and second-highest absolute hub score — the most
+#'       subtype-exclusive hubs. Requires \code{subtype_delta} to be present
+#'       in \code{node_metrics} (computed by
+#'       \code{calculate_subtype_hub_scores()}).}
+#'   }
+#' @param order_by Character string controlling column (gene) ordering after
+#'   selection. One of:
 #'   \describe{
 #'     \item{\code{"hub_score"}}{(Default) Ordered by descending maximum hub
 #'       score across subtypes.}
+#'     \item{\code{"delta"}}{Ordered by descending subtype-specificity delta.
+#'       Genes unique to one subtype appear leftmost. Ties broken by
+#'       descending maximum hub score.}
 #'     \item{\code{"alphabetical"}}{Alphabetical by gene name.}
 #'     \item{\code{"none"}}{Hierarchical clustering.}
 #'   }
@@ -39,10 +53,8 @@
 #'   Defaults to \code{11}.
 #' @param output_file Character string. Path to save the heatmap as a PDF.
 #'   If \code{NULL} (default) the plot is drawn to the active device only.
-#' @param width Numeric. Width of the saved PDF in inches. Defaults to
-#'   \code{10}.
-#' @param height Numeric. Height of the saved PDF in inches. Defaults to
-#'   \code{8}.
+#' @param width Numeric. Width of the saved PDF in inches. Defaults to \code{10}.
+#' @param height Numeric. Height of the saved PDF in inches. Defaults to \code{8}.
 #' @param verbose Logical. If \code{TRUE} (default), messages about the
 #'   detected subtypes and selected genes are printed.
 #'
@@ -60,7 +72,8 @@
 plot_subtype_hub_scores <- function(node_metrics = NULL,
                                     top_n = 30,
                                     hub_direction = c("up", "down"),
-                                    order_by = c("hub_score", "alphabetical", "none"),
+                                    select_by     = c("hub_score", "delta"),
+                                    order_by      = c("hub_score", "delta", "alphabetical", "none"),
                                     color_low  = "#FFF5E6",
                                     color_mid  = "#E85D04",
                                     color_high = "#370617",
@@ -73,6 +86,7 @@ plot_subtype_hub_scores <- function(node_metrics = NULL,
                                     verbose = TRUE){
   
   hub_direction <- match.arg(hub_direction)
+  select_by     <- match.arg(select_by)
   order_by      <- match.arg(order_by)
   
   # checks
@@ -92,6 +106,10 @@ plot_subtype_hub_scores <- function(node_metrics = NULL,
     stop("Package 'circlize' is required. Install with: install.packages('circlize')")
   }
   
+  if(select_by == "delta" && !"subtype_delta" %in% colnames(node_metrics)){
+    stop("select_by = 'delta' requires a 'subtype_delta' column. Run calculate_subtype_hub_scores() first...")
+  }
+  
   # auto-detect subtypes from <subtype>_hub_score columns
   hub_score_cols <- grep("_hub_score$", colnames(node_metrics), value = TRUE)
   subtypes       <- sub("_hub_score$", "", hub_score_cols)
@@ -103,30 +121,61 @@ plot_subtype_hub_scores <- function(node_metrics = NULL,
   if(verbose){
     message("Plotting subtype hub score heatmap...")
     message(sprintf("  -> Detected subtypes: %s", paste(subtypes, collapse = ", ")))
+    message(sprintf("  -> Selecting top %d genes by: %s", top_n, select_by))
   }
   
-  # select top genes
-  if(hub_direction == "up"){
-    node_metrics$max_hub_score <- apply(node_metrics[, hub_score_cols, drop = FALSE], 1, max, na.rm = TRUE)
-    top_genes <- node_metrics[order(node_metrics$max_hub_score, decreasing = TRUE), ]
+  # always compute max/min hub score — used for selection and/or tie-breaking
+  node_metrics$max_hub_score <- apply(node_metrics[, hub_score_cols, drop = FALSE], 1, max, na.rm = TRUE)
+  node_metrics$min_hub_score <- apply(node_metrics[, hub_score_cols, drop = FALSE], 1, min, na.rm = TRUE)
+  
+  # select top_n genes
+  if(select_by == "delta"){
+    # select the most subtype-exclusive hubs regardless of absolute magnitude
+    top_genes <- node_metrics[order(node_metrics$subtype_delta, decreasing = TRUE), ]
+    # for "down", restrict candidate pool to genes with any negative hub score
+    if(hub_direction == "down"){
+      top_genes <- top_genes[top_genes$min_hub_score < 0, ]
+    } else {
+      top_genes <- top_genes[top_genes$max_hub_score > 0, ]
+    }
     top_genes <- head(top_genes, top_n)
+    
   } else {
-    node_metrics$min_hub_score <- apply(node_metrics[, hub_score_cols, drop = FALSE], 1, min, na.rm = TRUE)
-    top_genes <- node_metrics[order(node_metrics$min_hub_score, decreasing = FALSE), ]
+    # default: select by highest magnitude hub score
+    if(hub_direction == "up"){
+      top_genes <- node_metrics[order(node_metrics$max_hub_score, decreasing = TRUE), ]
+    } else {
+      top_genes <- node_metrics[order(node_metrics$min_hub_score, decreasing = FALSE), ]
+    }
     top_genes <- head(top_genes, top_n)
   }
   
   if(verbose){
-    message(sprintf("  -> Selected top %d genes (direction: %s)", nrow(top_genes), hub_direction))
+    message(sprintf("  -> Selected %d genes", nrow(top_genes)))
+  }
+  
+  # compute sort_delta on the selected genes for use in ordering
+  score_mat <- top_genes[, hub_score_cols, drop = FALSE]
+  
+  if(hub_direction == "up"){
+    top_genes$sort_delta <- apply(score_mat, 1, function(x) {
+      s <- sort(x, decreasing = TRUE, na.last = TRUE)
+      if(length(s) >= 2) s[1] - s[2] else s[1]
+    })
+  } else {
+    top_genes$sort_delta <- apply(score_mat, 1, function(x) {
+      s <- sort(x, decreasing = FALSE, na.last = TRUE)
+      if(length(s) >= 2) s[2] - s[1] else abs(s[1])
+    })
   }
   
   # build matrix — subtypes as rows, genes as columns
-  hub_matrix           <- as.matrix(top_genes[, hub_score_cols, drop = FALSE])
+  hub_matrix           <- as.matrix(score_mat)
   rownames(hub_matrix) <- top_genes$name
   hub_matrix           <- t(hub_matrix)
   rownames(hub_matrix) <- subtypes
   
-  # gene name colours: colour by origin if column exists
+  # gene name colours by origin if column exists
   if("origin" %in% colnames(top_genes)){
     origin_colour_map <- c("seed" = "#CB0404", "pathway" = "#FF9F00", "extended set" = "#309898")
     gene_name_colours <- origin_colour_map[top_genes$origin]
@@ -148,16 +197,35 @@ plot_subtype_hub_scores <- function(node_metrics = NULL,
   
   # column ordering
   if(order_by == "alphabetical"){
-    col_order        <- order(colnames(hub_matrix))
-    cluster_cols     <- FALSE
+    col_order         <- order(colnames(hub_matrix))
+    cluster_cols      <- FALSE
     gene_name_colours <- gene_name_colours[colnames(hub_matrix)[col_order]]
+    
   } else if(order_by == "hub_score"){
-    col_order        <- seq_len(ncol(hub_matrix))   # already sorted by selection
-    cluster_cols     <- FALSE
-    gene_name_colours <- gene_name_colours[colnames(hub_matrix)]
+    if(hub_direction == "up"){
+      col_order <- order(top_genes$max_hub_score, decreasing = TRUE)
+    } else {
+      col_order <- order(top_genes$min_hub_score, decreasing = FALSE)
+    }
+    cluster_cols      <- FALSE
+    gene_name_colours <- gene_name_colours[colnames(hub_matrix)[col_order]]
+    
+  } else if(order_by == "delta"){
+    if(hub_direction == "up"){
+      col_order <- order(top_genes$sort_delta, top_genes$max_hub_score, decreasing = TRUE)
+    } else {
+      col_order <- order(top_genes$sort_delta, -top_genes$min_hub_score, decreasing = TRUE)
+    }
+    cluster_cols      <- FALSE
+    gene_name_colours <- gene_name_colours[colnames(hub_matrix)[col_order]]
+    if(verbose){
+      message(sprintf("  -> Ordering by subtype delta (most unique gene: %s)",
+                      colnames(hub_matrix)[col_order[1]]))
+    }
+    
   } else {
-    col_order        <- NULL
-    cluster_cols     <- TRUE
+    col_order         <- NULL
+    cluster_cols      <- TRUE
     gene_name_colours <- gene_name_colours[colnames(hub_matrix)]
   }
   
@@ -191,7 +259,8 @@ plot_subtype_hub_scores <- function(node_metrics = NULL,
   
   # auto title
   if(is.null(title)){
-    title <- sprintf("Subtype-Specific Hub Gene Scores (%s)", hub_direction)
+    title <- sprintf("Subtype-Specific Hub Gene Scores (%s, selected by %s)",
+                     hub_direction, select_by)
   }
   
   # build heatmap

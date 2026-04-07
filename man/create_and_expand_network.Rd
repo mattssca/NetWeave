@@ -84,7 +84,8 @@ among the expanded gene set, retaining only nodes present in
 eigenvector centrality, HITS hub score, and Louvain community.
 }
 
-Requires an internet connection if STRING files are not cached locally,
-or when \code{biomaRt} is called to convert Ensembl peptide IDs to gene
-symbols.
+Requires an internet connection only if STRING files are not cached locally.
+Gene symbol mapping uses the local \code{org.Hs.eg.db} annotation package
+instead of \code{biomaRt}, which eliminates network round-trips and is
+typically 10–50× faster.
 }

@@ -49,9 +49,10 @@
 #'     \code{string_data_dir}.
 #'   \item Map pathway genes to STRING protein IDs.
 #'   \item Retrieve STRING first-degree neighbours, convert them to HGNC
-#'     symbols via \code{biomaRt}, filter to genes present in
-#'     \code{expr_data}, optionally remove blacklisted genes, and rank by
-#'     STRING interaction degree to select the top \code{max_added_genes}.
+#'     symbols using the STRING protein info table (preferred_name field),
+#'     filter to genes present in \code{expr_data}, optionally remove
+#'     blacklisted genes, and rank by STRING interaction degree to select
+#'     the top \code{max_added_genes}.
 #'   \item Build an \code{igraph} undirected graph from STRING interactions
 #'     among the expanded gene set, retaining only nodes present in
 #'     \code{expr_data}.
@@ -60,12 +61,11 @@
 #' }
 #'
 #' Requires an internet connection only if STRING files are not cached locally.
-#' Gene symbol mapping uses the local \code{org.Hs.eg.db} annotation package
-#' instead of \code{biomaRt}, which eliminates network round-trips and is
-#' typically 10–50× faster.
+#' Gene symbol mapping uses \code{string_db$get_proteins()} which reads the
+#' cached STRING protein info file, guaranteeing full coverage and consistency
+#' with the STRING IDs used throughout.
 #'
 #' @import STRINGdb igraph
-#' @importFrom AnnotationDbi select
 #' @importFrom utils capture.output
 #'
 #' @export
@@ -134,6 +134,13 @@ create_and_expand_network <- function(expr_data,
                               input_directory = "")
   }
   
+  # build a complete STRING protein_id -> HGNC symbol lookup from the
+  # STRING protein info table — guaranteed full coverage, no external db needed
+  if(verbose) message("  -> Building STRING ID -> symbol lookup...")
+  all_proteins <- string_db$get_proteins()
+  id_to_symbol <- setNames(all_proteins$preferred_name,
+                           all_proteins$protein_external_id)
+  
   # step 2: map pathway genes to STRING IDs
   if(verbose) message("Mapping pathway genes to STRING IDs...")
   
@@ -157,20 +164,10 @@ create_and_expand_network <- function(expr_data,
   neighbors <- as.character(neighbors[!is.na(neighbors) & neighbors != ""])
   if(length(neighbors) == 0) stop("No valid STRING neighbor IDs...")
   
-  # convert neighbour STRING IDs to gene symbols via local annotation db
-  # (replaces biomaRt network calls - much faster)
-  if(verbose) message("  -> Mapping neighbor IDs to gene symbols (local db)...")
-  neighbor_peptides <- sub("9606\\.", "", neighbors)
-  
-  mapping <- AnnotationDbi::select(
-    org.Hs.eg.db::org.Hs.eg.db,
-    keys    = unique(neighbor_peptides),
-    columns = "SYMBOL",
-    keytype = "ENSEMBLPROT"
-  )
-  
-  neighbor_genes <- unique(mapping$SYMBOL)
-  neighbor_genes <- neighbor_genes[!is.na(neighbor_genes)]
+  # convert neighbour STRING IDs to gene symbols using the pre-built lookup
+  if(verbose) message("  -> Mapping neighbor IDs to gene symbols...")
+  neighbor_genes <- unique(id_to_symbol[neighbors])
+  neighbor_genes <- neighbor_genes[!is.na(neighbor_genes) & neighbor_genes != ""]
   neighbor_genes <- setdiff(neighbor_genes, available_pathway_genes)
   neighbor_genes <- intersect(neighbor_genes, available_genes)
   
@@ -185,7 +182,6 @@ create_and_expand_network <- function(expr_data,
                               length(neighbor_genes)))
   
   # rank neighbours by degree and select top N
-  # single map + single get_interactions call; both results are cached for reuse below
   all_genes <- c(available_pathway_genes, neighbor_genes)
   
   if(verbose) message("Building interaction network (single query)...")
@@ -195,18 +191,16 @@ create_and_expand_network <- function(expr_data,
   ))
   all_ids <- all_mapped$STRING_id
   
-  # cache this result - reused for the final graph (no second get_interactions call)
+  # cache this result - reused for the final graph
   network_edges_all <- string_db$get_interactions(all_ids)
   if(nrow(network_edges_all) == 0) stop("No network edges found...")
   
-  # build STRING_id -> symbol lookup from already-mapped data (no biomaRt call needed)
-  id_to_symbol  <- setNames(all_mapped$gene, all_mapped$STRING_id)
-  degree_table  <- table(c(network_edges_all$from, network_edges_all$to))
+  degree_table   <- table(c(network_edges_all$from, network_edges_all$to))
   degree_symbols <- id_to_symbol[names(degree_table)]
   
   top_neighbors <- setdiff(degree_symbols[order(degree_table, decreasing = TRUE)],
                            available_pathway_genes)
-  top_neighbors <- unique(top_neighbors[!is.na(top_neighbors)])
+  top_neighbors <- unique(top_neighbors[!is.na(top_neighbors) & top_neighbors != ""])
   top_neighbors <- intersect(top_neighbors, available_genes)
   top_neighbors <- head(top_neighbors, max_added_genes)
   
@@ -218,25 +212,22 @@ create_and_expand_network <- function(expr_data,
   }
   
   # step 4: build network graph
-  # reuse all_mapped and network_edges_all - no additional string_db calls needed
   if(verbose) message("Building network graph...")
   
-  # subset cached map to get expanded IDs (replaces 3rd string_db$map call)
   expanded_ids <- all_mapped$STRING_id[all_mapped$gene %in% expanded_genes]
   
-  # filter cached edge list to expanded set (replaces 2nd get_interactions call)
   network_edges <- network_edges_all[
     network_edges_all$from %in% expanded_ids &
-    network_edges_all$to   %in% expanded_ids, ]
+      network_edges_all$to   %in% expanded_ids, ]
   
   if(nrow(network_edges) == 0) stop("No network edges found for expanded gene set...")
   
   g <- graph_from_data_frame(network_edges, directed = FALSE)
   
-  # rename nodes using cached id_to_symbol lookup (replaces 3rd biomaRt call)
+  # rename nodes using the pre-built STRING lookup
   V(g)$name <- id_to_symbol[V(g)$name]
   
-  g <- induced_subgraph(g, which(V(g)$name %in% available_genes & !is.na(V(g)$name)))
+  g <- induced_subgraph(g, which(V(g)$name %in% available_genes & !is.na(V(g)$name) & V(g)$name != ""))
   
   if(verbose){
     message(sprintf("  -> Network created: %d nodes, %d edges",
@@ -248,7 +239,6 @@ create_and_expand_network <- function(expr_data,
   
   gene_names <- V(g)$name
   
-  # vectorized origin assignment
   origin <- dplyr::case_when(
     !is.null(seed_gene) & gene_names == seed_gene ~ "seed",
     gene_names %in% available_pathway_genes        ~ "pathway",

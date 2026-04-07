@@ -54,7 +54,7 @@
 #' (partial/gene-symbol search paths).
 #'
 #' @importFrom dplyr filter
-#' @importFrom biomaRt useEnsembl getBM
+#' @import biomaRt
 #'
 #' @export
 get_pathway_genes = function(this_pathway = NULL,

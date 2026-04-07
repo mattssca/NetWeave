@@ -201,7 +201,7 @@ run_netweave <- function(seed_gene,
                                                eigenvector_weight = eigenvector_weight,
                                                specificity_method = specificity_method,
                                                verbose            = verbose)
-  
+
   list(
     node_metrics  = node_metrics,
     edge_data     = network$edge_data,

@@ -25,8 +25,9 @@ plot_subtype_hub_scores(
 \item{node_metrics}{A data frame of network node metrics containing
 \code{<subtype>_hub_score} columns as produced by
 \code{calculate_subtype_hub_scores()}. Must also contain a \code{name}
-column. An \code{origin} column is optional but, if present, seed genes
-(\code{origin == "seed"}) are highlighted in red.}
+column. An \code{origin} column is optional but, if present, gene names
+are coloured by origin: \code{"seed"} = red, \code{"pathway"} = green,
+\code{"extended set"} = blue.}
 
 \item{top_n}{Integer. Number of genes to display, selected by the highest
 (or lowest, when \code{hub_direction = "down"}) hub score across all

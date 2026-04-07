@@ -33,7 +33,7 @@
 #'   the detected subtypes and per-subtype hub score ranges are printed.
 #'
 #' @return The \code{node_metrics} data frame with two additional columns per
-#'   detected subtype:
+#'   detected subtype, plus two summary columns:
 #'   \describe{
 #'     \item{\code{<subtype>_spec_score}}{Specificity score scaled to
 #'       \code{[-1, 1]}. Positive values indicate higher expression in this
@@ -42,6 +42,11 @@
 #'       multiplied by specificity score. Positive values indicate high-centrality
 #'       genes upregulated in this subtype; negative values indicate
 #'       high-centrality genes downregulated in this subtype.}
+#'     \item{\code{subtype_delta}}{Difference between the highest and
+#'       second-highest absolute hub score across all subtypes. Higher values
+#'       indicate greater subtype exclusivity of hub activity.}
+#'     \item{\code{dominant_subtype}}{Name of the subtype with the highest
+#'       absolute hub score for each gene.}
 #'   }
 #'
 #' @details
@@ -173,6 +178,32 @@ calculate_subtype_hub_scores <- function(node_metrics = NULL,
                       min(node_metrics[[col]], na.rm = TRUE),
                       max(node_metrics[[col]], na.rm = TRUE)))
     }
+  }
+  
+  # compute subtype exclusivity metrics across all hub score columns
+  hub_score_cols <- paste0(subtypes, "_hub_score")
+  abs_hub_matrix <- abs(as.matrix(node_metrics[, hub_score_cols, drop = FALSE]))
+  
+  # subtype_delta: gap between highest and second-highest absolute hub score
+  # a high value means hub activity is concentrated in one subtype
+  node_metrics[["subtype_delta"]] <- apply(abs_hub_matrix, 1, function(x) {
+    s <- sort(x, decreasing = TRUE, na.last = TRUE)
+    if(length(s) >= 2) s[1] - s[2] else s[1]
+  })
+  
+  # dominant_subtype: subtype with the highest absolute hub score per gene
+  node_metrics[["dominant_subtype"]] <- subtypes[
+    apply(abs_hub_matrix, 1, which.max)
+  ]
+  
+  if(verbose){
+    message(sprintf("  -> subtype_delta range: [%.3f, %.3f]",
+                    min(node_metrics$subtype_delta, na.rm = TRUE),
+                    max(node_metrics$subtype_delta, na.rm = TRUE)))
+    message(sprintf("  -> dominant_subtype distribution: %s",
+                    paste(names(table(node_metrics$dominant_subtype)),
+                          table(node_metrics$dominant_subtype),
+                          sep = "=", collapse = ", ")))
   }
   
   return(node_metrics)

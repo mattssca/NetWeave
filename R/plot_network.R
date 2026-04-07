@@ -21,6 +21,11 @@
 #' @param size_by Character string. Name of a numeric column in
 #'   \code{node_metrics} to scale node size by. Defaults to \code{"degree"}.
 #'   Pass \code{NULL} for uniform node sizes.
+#' @param shape_by Character string. Name of a categorical column in
+#'   \code{node_metrics} to map to node shape. Shapes are drawn from the
+#'   filled symbol set (circle, square, diamond, triangle-up, triangle-down)
+#'   so that the \code{fill} colour aesthetic is preserved. Pass \code{NULL}
+#'   (default) for uniform circles.
 #' @param label_nodes Character string controlling which nodes are labelled.
 #'   One of:
 #'   \describe{
@@ -66,6 +71,7 @@ plot_network <- function(node_metrics = NULL,
                          layout = "fr",
                          color_by = "community",
                          size_by = "degree",
+                         shape_by = NULL,
                          label_nodes = c("seed", "all", "none"),
                          top_label_n = 20,
                          edge_alpha = 0.3,
@@ -104,6 +110,10 @@ plot_network <- function(node_metrics = NULL,
     stop(sprintf("size_by column '%s' not found in node_metrics...", size_by))
   }
   
+  if(!is.null(shape_by) && !shape_by %in% colnames(node_metrics)){
+    stop(sprintf("shape_by column '%s' not found in node_metrics...", shape_by))
+  }
+  
   if(label_nodes == "seed" && !"origin" %in% colnames(node_metrics)){
     warning("label_nodes = 'seed' requires an 'origin' column. Falling back to label_nodes = 'none'.")
     label_nodes <- "none"
@@ -128,7 +138,8 @@ plot_network <- function(node_metrics = NULL,
   if(verbose){
     message("Drawing network...")
     message(sprintf("  -> Nodes: %d, Edges: %d", length(retained_genes), nrow(filtered_edges)))
-    message(sprintf("  -> Colour by: %s | Size by: %s", color_by, size_by %||% "uniform"))
+    message(sprintf("  -> Colour by: %s | Size by: %s | Shape by: %s",
+                    color_by, size_by %||% "uniform", shape_by %||% "uniform"))
   }
   
   # build igraph and attach all node attributes
@@ -242,18 +253,44 @@ plot_network <- function(node_metrics = NULL,
     color_is_numeric <- FALSE
   }
   
+  # coerce shape_by column to factor
+  if(!is.null(shape_by)){
+    shape_vals <- igraph::vertex_attr(g, shape_by)
+    g          <- igraph::set_vertex_attr(g, shape_by, value = factor(shape_vals))
+  }
+  
   p <- ggraph::ggraph(g, layout = layout) +
     ggraph::geom_edge_link(alpha = edge_alpha, colour = "#aaaaaa") +
     {
-      if(!is.null(size_by)){
+      if(!is.null(size_by) && !is.null(shape_by)){
+        ggraph::geom_node_point(
+          ggplot2::aes(fill = .data[[color_by]], size = .data[[size_by]], shape = .data[[shape_by]]),
+          colour = "white", stroke = 0.4
+        )
+      } else if(!is.null(size_by)){
         ggraph::geom_node_point(
           ggplot2::aes(fill = .data[[color_by]], size = .data[[size_by]]),
           shape = 21, colour = "white", stroke = 0.4
+        )
+      } else if(!is.null(shape_by)){
+        ggraph::geom_node_point(
+          ggplot2::aes(fill = .data[[color_by]], shape = .data[[shape_by]]),
+          colour = "white", stroke = 0.4, size = 5
         )
       } else {
         ggraph::geom_node_point(
           ggplot2::aes(fill = .data[[color_by]]),
           shape = 21, colour = "white", stroke = 0.4, size = 5
+        )
+      }
+    } +
+    {
+      if(!is.null(shape_by)){
+        shape_levels  <- levels(igraph::vertex_attr(g, shape_by))
+        filled_shapes <- c(21, 22, 23, 24, 25)
+        ggplot2::scale_shape_manual(
+          name   = shape_by,
+          values = setNames(rep(filled_shapes, length.out = length(shape_levels)), shape_levels)
         )
       }
     } +
