@@ -43,14 +43,14 @@ Queries the \code{Ensembl2Reactome} object (must exist in the global
 environment) to retrieve all HGNC gene symbols associated with a given
 Reactome pathway name or gene symbol. Matching is attempted in order:
 exact pathway name, partial pathway name, then gene symbol lookup via
-\code{biomaRt}.
+\code{org.Hs.eg.db}.
 }
 \details{
 Alternatively, supply a pre-defined gene list via \code{gene_list} to
 bypass Reactome entirely.
 
 When \code{gene_list} is supplied it takes precedence and the function
-returns immediately without touching Reactome or \code{biomaRt}.
+returns immediately without touching Reactome.
 
 Otherwise, the function requires the \code{Ensembl2Reactome} data frame to
 exist in the global environment with at least the columns
@@ -63,12 +63,11 @@ Matching proceeds as follows:
 \item Partial case-insensitive match on \code{pathway_name} via
 \code{grepl}.
 \item If no pathway match is found, \code{this_pathway} is treated as an
-HGNC gene symbol. A \code{biomaRt} query is used to convert it to an
+HGNC gene symbol. \code{org.Hs.eg.db} is used to convert it to an
 Ensembl ID, and all pathways containing that gene are returned.
 }
 
-Ensembl IDs from the matched pathways are converted to HGNC symbols via a
-\code{biomaRt} query against the \code{hsapiens_gene_ensembl} dataset.
-An internet connection is required whenever \code{biomaRt} is invoked
-(partial/gene-symbol search paths).
+Ensembl IDs from the matched pathways are converted to HGNC symbols via
+\code{org.Hs.eg.db}. Mixed ID types (\code{ENSG}, \code{ENSP},
+\code{ENST}) are handled automatically. No internet connection is required.
 }

@@ -4,7 +4,7 @@
 #' environment) to retrieve all HGNC gene symbols associated with a given
 #' Reactome pathway name or gene symbol. Matching is attempted in order:
 #' exact pathway name, partial pathway name, then gene symbol lookup via
-#' \code{biomaRt}.
+#' \code{org.Hs.eg.db}.
 #'
 #' Alternatively, supply a pre-defined gene list via \code{gene_list} to
 #' bypass Reactome entirely.
@@ -31,7 +31,7 @@
 #'
 #' @details
 #' When \code{gene_list} is supplied it takes precedence and the function
-#' returns immediately without touching Reactome or \code{biomaRt}.
+#' returns immediately without touching Reactome.
 #'
 #' Otherwise, the function requires the \code{Ensembl2Reactome} data frame to
 #' exist in the global environment with at least the columns
@@ -44,17 +44,16 @@
 #'   \item Partial case-insensitive match on \code{pathway_name} via
 #'     \code{grepl}.
 #'   \item If no pathway match is found, \code{this_pathway} is treated as an
-#'     HGNC gene symbol. A \code{biomaRt} query is used to convert it to an
+#'     HGNC gene symbol. \code{org.Hs.eg.db} is used to convert it to an
 #'     Ensembl ID, and all pathways containing that gene are returned.
 #' }
 #'
-#' Ensembl IDs from the matched pathways are converted to HGNC symbols via a
-#' \code{biomaRt} query against the \code{hsapiens_gene_ensembl} dataset.
-#' An internet connection is required whenever \code{biomaRt} is invoked
-#' (partial/gene-symbol search paths).
+#' Ensembl IDs from the matched pathways are converted to HGNC symbols via
+#' \code{org.Hs.eg.db}. Mixed ID types (\code{ENSG}, \code{ENSP},
+#' \code{ENST}) are handled automatically. No internet connection is required.
 #'
 #' @importFrom dplyr filter
-#' @import biomaRt
+#' @importFrom AnnotationDbi select
 #'
 #' @export
 get_pathway_genes = function(this_pathway = NULL,
@@ -63,7 +62,7 @@ get_pathway_genes = function(this_pathway = NULL,
                              export_data = FALSE,
                              out_path = NULL){
   
-  # check data
+  # checks
   if(is.null(this_pathway) && is.null(gene_list)){
     stop("User must provide a query pathway/gene name (this_pathway) or a pre-defined gene list (gene_list)...")
   }
@@ -88,17 +87,13 @@ get_pathway_genes = function(this_pathway = NULL,
     stop("Ensembl to Reactome data is missing...")
   }
   
-  # message
-  if(verbose){
-    message("Retrieving pathway genes...")
-  }
+  if(verbose) message("Retrieving pathway genes...")
   
-  # determine if input is a pathway name or gene
-  # first, try exact pathway name match (case-insensitive)
+  # step 1: exact pathway name match (case-insensitive)
   pathway_all <- Ensembl2Reactome %>%
     filter(tolower(pathway_name) == tolower(this_pathway))
   
-  # if no exact match, try partial match
+  # step 2: partial pathway name match
   if(nrow(pathway_all) == 0){
     pathway_all <- Ensembl2Reactome %>%
       filter(grepl(this_pathway, pathway_name, ignore.case = TRUE))
@@ -115,37 +110,38 @@ get_pathway_genes = function(this_pathway = NULL,
     }
   }
   
-  # if still no results, try searching by gene symbol
+  # step 3: treat as gene symbol if still no match
   if(nrow(pathway_all) == 0){
     if(verbose){
       message(sprintf("  -> No pathway found matching '%s'", this_pathway))
       message("  -> Searching as gene name...")
     }
     
-    mart <- useEnsembl("ensembl", dataset = "hsapiens_gene_ensembl", mirror = "useast")
+    gene_map <- tryCatch(
+      AnnotationDbi::select(org.Hs.eg.db::org.Hs.eg.db,
+                            keys    = this_pathway,
+                            columns = "ENSEMBL",
+                            keytype = "SYMBOL"),
+      error = function(e) NULL
+    )
     
-    gene_ensembl <- getBM(attributes = c("ensembl_gene_id", "hgnc_symbol"),
-                          filters = "hgnc_symbol",
-                          values = this_pathway,
-                          mart = mart)
-    
-    if(nrow(gene_ensembl) == 0){
+    if(is.null(gene_map) || nrow(gene_map) == 0 || all(is.na(gene_map$ENSEMBL))){
       stop(sprintf("No pathway or gene found matching '%s'", this_pathway))
     }
     
+    ensembl_ids <- unique(gene_map$ENSEMBL[!is.na(gene_map$ENSEMBL)])
+    
     pathway_all <- Ensembl2Reactome %>%
-      filter(gene_id %in% gene_ensembl$ensembl_gene_id)
+      filter(gene_id %in% ensembl_ids)
     
     if(nrow(pathway_all) == 0){
       stop(sprintf("Gene '%s' found but not present in any Reactome pathways", this_pathway))
     }
     
     if(verbose){
-      message(sprintf("  -> Found gene '%s' in %d pathways",
+      message(sprintf("  -> Found gene '%s' in %d pathway(s)",
                       this_pathway, length(unique(pathway_all$pathway_name))))
     }
-  } else {
-    mart <- useEnsembl("ensembl", dataset = "hsapiens_gene_ensembl", mirror = "useast")
   }
   
   if(verbose && length(unique(pathway_all$pathway_name)) > 1){
@@ -155,21 +151,49 @@ get_pathway_genes = function(this_pathway = NULL,
     }
   }
   
-  # convert Ensembl IDs to HGNC symbols
-  pathway_ensembl <- unique(pathway_all$gene_id)
+  # convert IDs to HGNC symbols via org.Hs.eg.db
+  # Reactome gene_id column contains mixed types: ENSG, ENSP, ENST
+  # each requires a different keytype — split and query separately
+  pathway_ids <- unique(pathway_all$gene_id)
+  ensg_ids    <- grep("^ENSG", pathway_ids, value = TRUE)
+  ensp_ids    <- grep("^ENSP", pathway_ids, value = TRUE)
+  enst_ids    <- grep("^ENST", pathway_ids, value = TRUE)
   
-  pathway_hgnc <- getBM(attributes = c("ensembl_gene_id", "hgnc_symbol"),
-                        filters = "ensembl_gene_id",
-                        values = pathway_ensembl,
-                        mart = mart)
+  symbols <- character(0)
   
-  pathway_hgnc <- sort(unique(pathway_hgnc$hgnc_symbol[pathway_hgnc$hgnc_symbol != ""]))
+  if(length(ensg_ids) > 0){
+    res <- tryCatch(
+      AnnotationDbi::select(org.Hs.eg.db::org.Hs.eg.db,
+                            keys = ensg_ids, columns = "SYMBOL", keytype = "ENSEMBL"),
+      error = function(e) data.frame(SYMBOL = character(0))
+    )
+    symbols <- c(symbols, res$SYMBOL)
+  }
+  
+  if(length(ensp_ids) > 0){
+    res <- tryCatch(
+      AnnotationDbi::select(org.Hs.eg.db::org.Hs.eg.db,
+                            keys = ensp_ids, columns = "SYMBOL", keytype = "ENSEMBLPROT"),
+      error = function(e) data.frame(SYMBOL = character(0))
+    )
+    symbols <- c(symbols, res$SYMBOL)
+  }
+  
+  if(length(enst_ids) > 0){
+    res <- tryCatch(
+      AnnotationDbi::select(org.Hs.eg.db::org.Hs.eg.db,
+                            keys = enst_ids, columns = "SYMBOL", keytype = "ENSEMBLTRANS"),
+      error = function(e) data.frame(SYMBOL = character(0))
+    )
+    symbols <- c(symbols, res$SYMBOL)
+  }
+  
+  pathway_hgnc <- sort(unique(symbols[!is.na(symbols) & symbols != ""]))
   
   if(verbose){
     message(sprintf("  -> Retrieved %d unique genes from pathway(s)", length(pathway_hgnc)))
   }
   
-  # export if requested
   if(export_data){
     save(pathway_hgnc, file = paste0(out_path, ".Rdata"))
   }

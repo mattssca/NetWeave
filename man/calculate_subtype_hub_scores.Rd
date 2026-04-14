@@ -48,7 +48,7 @@ the detected subtypes and per-subtype hub score ranges are printed.}
 }
 \value{
 The \code{node_metrics} data frame with two additional columns per
-detected subtype:
+detected subtype, plus two summary columns:
 \describe{
 \item{\code{<subtype>_spec_score}}{Specificity score scaled to
 \code{[-1, 1]}. Positive values indicate higher expression in this
@@ -57,6 +57,11 @@ subtype relative to others.}
 multiplied by specificity score. Positive values indicate high-centrality
 genes upregulated in this subtype; negative values indicate
 high-centrality genes downregulated in this subtype.}
+\item{\code{subtype_delta}}{Difference between the highest and
+second-highest absolute hub score across all subtypes. Higher values
+indicate greater subtype exclusivity of hub activity.}
+\item{\code{dominant_subtype}}{Name of the subtype with the highest
+absolute hub score for each gene.}
 }
 }
 \description{

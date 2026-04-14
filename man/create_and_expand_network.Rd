@@ -11,6 +11,7 @@ create_and_expand_network(
   max_added_genes = 20,
   string_score_threshold = 400,
   verbose = TRUE,
+  apply_blacklist = FALSE,
   genes_blacklist = NULL,
   string_data_dir = "data/string_db"
 )
@@ -32,14 +33,26 @@ genes to add when expanding the network beyond the pathway genes.
 Defaults to \code{20}.}
 
 \item{string_score_threshold}{Integer. Minimum combined STRING interaction
-score (0–1000) to retain an edge. Defaults to \code{400}.}
+score (0-1000) to retain an edge. Defaults to \code{400}.}
 
 \item{verbose}{Logical. If \code{TRUE} (default), progress messages are
 printed at each step.}
 
-\item{genes_blacklist}{An optional character vector of gene symbols to
-exclude from the neighbour expansion step. Pathway seed genes are not
-affected.}
+\item{apply_blacklist}{Logical. If \code{TRUE}, automatically
+identifies and removes genes whose high STRING degree centrality reflects
+membership in ubiquitous cellular machinery (ribosomal proteins, histones,
+splicing factors, core translation factors) rather than subtype-specific
+signalling activity. The blacklist is built dynamically from the genes
+present in the expanded network via \code{get_blacklist()}, ensuring it
+is tailored to the incoming data. Set to \code{FALSE} (default) to disable automatic
+filtering. Has no effect on pathway seed genes --- only expansion
+candidates are affected.}
+
+\item{genes_blacklist}{An optional character vector of additional gene
+symbols to exclude, applied on top of the automatic blacklist when
+\code{apply_blacklist = TRUE}. Pass \code{NULL} (default) to use only
+the automatic blacklist. To disable all blacklisting set both
+\code{apply_blacklist = FALSE} and \code{genes_blacklist = NULL}.}
 
 \item{string_data_dir}{Character string path to a directory containing
 pre-downloaded STRING flat files. If the required files are present,
@@ -74,9 +87,10 @@ local files if all required \code{.txt.gz} files are present in
 \code{string_data_dir}.
 \item Map pathway genes to STRING protein IDs.
 \item Retrieve STRING first-degree neighbours, convert them to HGNC
-symbols via \code{biomaRt}, filter to genes present in
-\code{expr_data}, optionally remove blacklisted genes, and rank by
-STRING interaction degree to select the top \code{max_added_genes}.
+symbols using the STRING protein info table (preferred_name field),
+filter to genes present in \code{expr_data}, optionally remove
+blacklisted genes, and rank by STRING interaction degree to select
+the top \code{max_added_genes}.
 \item Build an \code{igraph} undirected graph from STRING interactions
 among the expanded gene set, retaining only nodes present in
 \code{expr_data}.
@@ -85,7 +99,7 @@ eigenvector centrality, HITS hub score, and Louvain community.
 }
 
 Requires an internet connection only if STRING files are not cached locally.
-Gene symbol mapping uses the local \code{org.Hs.eg.db} annotation package
-instead of \code{biomaRt}, which eliminates network round-trips and is
-typically 10–50× faster.
+Gene symbol mapping uses \code{string_db$get_proteins()} which reads the
+cached STRING protein info file, guaranteeing full coverage and consistency
+with the STRING IDs used throughout.
 }

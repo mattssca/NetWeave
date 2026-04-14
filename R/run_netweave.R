@@ -41,6 +41,8 @@
 #'   pre-downloaded STRING flat files. Defaults to \code{"data/string_db"}.
 #' @param genes_blacklist Optional character vector of gene symbols to exclude
 #'   from neighbour expansion. Defaults to \code{NULL}.
+#' @param apply_blacklist Boolean flag, set to TRUE for removing ubiquitous cellular machinery 
+#' (ribosomal proteins, histones, splicing factors, core translation factors). Default is FALSE.
 #' @param low_expr_threshold Numeric threshold for low-expression annotation.
 #'   Values in (0, 1) are treated as a percentile; values >= 1 as an absolute
 #'   cutoff; \code{0} disables filtering. Defaults to \code{0.25}.
@@ -105,6 +107,7 @@ run_netweave <- function(seed_gene,
                          string_score_threshold = 900,
                          string_data_dir      = "data/string_db",
                          genes_blacklist      = NULL,
+                         apply_blacklist     = FALSE,
                          low_expr_threshold   = 0.25,
                          sig_threshold        = 0.05,
                          tissue_filter        = "either",
@@ -133,6 +136,7 @@ run_netweave <- function(seed_gene,
                                        string_score_threshold = string_score_threshold,
                                        verbose                = verbose,
                                        genes_blacklist        = genes_blacklist,
+                                       apply_blacklist        = apply_blacklist,
                                        string_data_dir        = string_data_dir)
   
   node_metrics <- network$node_metrics

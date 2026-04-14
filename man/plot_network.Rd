@@ -10,6 +10,7 @@ plot_network(
   layout = "fr",
   color_by = "community",
   size_by = "degree",
+  shape_by = NULL,
   label_nodes = c("seed", "all", "none"),
   top_label_n = 20,
   edge_alpha = 0.3,
@@ -43,6 +44,12 @@ to use for node fill colour. Defaults to \code{"community"}. Use
 \item{size_by}{Character string. Name of a numeric column in
 \code{node_metrics} to scale node size by. Defaults to \code{"degree"}.
 Pass \code{NULL} for uniform node sizes.}
+
+\item{shape_by}{Character string. Name of a categorical column in
+\code{node_metrics} to map to node shape. Shapes are drawn from the
+filled symbol set (circle, square, diamond, triangle-up, triangle-down)
+so that the \code{fill} colour aesthetic is preserved. Pass \code{NULL}
+(default) for uniform circles.}
 
 \item{label_nodes}{Character string controlling which nodes are labelled.
 One of:

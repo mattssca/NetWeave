@@ -18,12 +18,23 @@
 #'   genes to add when expanding the network beyond the pathway genes.
 #'   Defaults to \code{20}.
 #' @param string_score_threshold Integer. Minimum combined STRING interaction
-#'   score (0–1000) to retain an edge. Defaults to \code{400}.
+#'   score (0-1000) to retain an edge. Defaults to \code{400}.
 #' @param verbose Logical. If \code{TRUE} (default), progress messages are
 #'   printed at each step.
-#' @param genes_blacklist An optional character vector of gene symbols to
-#'   exclude from the neighbour expansion step. Pathway seed genes are not
-#'   affected.
+#' @param apply_blacklist Logical. If \code{TRUE}, automatically
+#'   identifies and removes genes whose high STRING degree centrality reflects
+#'   membership in ubiquitous cellular machinery (ribosomal proteins, histones,
+#'   splicing factors, core translation factors) rather than subtype-specific
+#'   signalling activity. The blacklist is built dynamically from the genes
+#'   present in the expanded network via \code{get_blacklist()}, ensuring it
+#'   is tailored to the incoming data. Set to \code{FALSE} (default) to disable automatic
+#'   filtering. Has no effect on pathway seed genes --- only expansion
+#'   candidates are affected.
+#' @param genes_blacklist An optional character vector of additional gene
+#'   symbols to exclude, applied on top of the automatic blacklist when
+#'   \code{apply_blacklist = TRUE}. Pass \code{NULL} (default) to use only
+#'   the automatic blacklist. To disable all blacklisting set both
+#'   \code{apply_blacklist = FALSE} and \code{genes_blacklist = NULL}.
 #' @param string_data_dir Character string path to a directory containing
 #'   pre-downloaded STRING flat files. If the required files are present,
 #'   they are used instead of downloading. Defaults to
@@ -75,6 +86,7 @@ create_and_expand_network <- function(expr_data,
                                       max_added_genes = 20,
                                       string_score_threshold = 400,
                                       verbose = TRUE,
+                                      apply_blacklist = FALSE,
                                       genes_blacklist = NULL,
                                       string_data_dir = "data/string_db"){
   
@@ -171,10 +183,14 @@ create_and_expand_network <- function(expr_data,
   neighbor_genes <- setdiff(neighbor_genes, available_pathway_genes)
   neighbor_genes <- intersect(neighbor_genes, available_genes)
   
-  # remove blacklisted genes if provided
+  # remove user-supplied blacklisted genes from neighbour candidates
+  # (applied here so blacklisted genes are never ranked or selected)
   if(!is.null(genes_blacklist)){
     n_removed <- length(intersect(neighbor_genes, genes_blacklist))
-    if(verbose) message(sprintf("  -> Removing %d blacklisted genes", n_removed))
+    if(verbose && n_removed > 0){
+      message(sprintf("  -> Custom blacklist: removing %d gene(s) from neighbour candidates",
+                      n_removed))
+    }
     neighbor_genes <- setdiff(neighbor_genes, genes_blacklist)
   }
   
@@ -211,6 +227,46 @@ create_and_expand_network <- function(expr_data,
                     length(top_neighbors), length(expanded_genes)))
   }
   
+  # ── Automatic blacklist filtering ─────────────────────────────────
+  if(apply_blacklist){
+    if(verbose) message("Applying automatic blacklist filter...")
+    
+    # In genome-wide mode top_neighbors is empty — all genes are treated
+    # as pathway genes. Apply blacklist to the full expanded set instead.
+    # In pathway/signature mode, only filter expansion candidates to
+    # protect pathway seed genes from removal.
+    blacklist_target <- if(length(top_neighbors) == 0) {
+      expanded_genes
+    } else {
+      top_neighbors
+    }
+    
+    auto_blacklist <- get_blacklist(gene_universe = blacklist_target,
+                                    verbose       = verbose)
+    
+    if(length(auto_blacklist) > 0){
+      
+      if(length(top_neighbors) == 0){
+        # genome-wide mode: remove from full expanded set
+        expanded_genes <- setdiff(expanded_genes, auto_blacklist)
+      } else {
+        # pathway mode: remove from expansion candidates only
+        top_neighbors  <- setdiff(top_neighbors, auto_blacklist)
+        expanded_genes <- unique(c(available_pathway_genes, top_neighbors))
+      }
+      
+      if(verbose){
+        message(sprintf(
+          "  -> %d gene(s) removed. Expanded network now %d genes.",
+          length(auto_blacklist),
+          length(expanded_genes)
+        ))
+      }
+    } else {
+      if(verbose) message("  -> No blacklisted genes found in expanded set.")
+    }
+  }
+  
   # step 4: build network graph
   if(verbose) message("Building network graph...")
   
@@ -239,11 +295,13 @@ create_and_expand_network <- function(expr_data,
   
   gene_names <- V(g)$name
   
+  seed_condition <- if (!is.null(seed_gene)) gene_names == seed_gene else rep(FALSE, length(gene_names))
+  
   origin <- dplyr::case_when(
-    !is.null(seed_gene) & gene_names == seed_gene ~ "seed",
-    gene_names %in% available_pathway_genes        ~ "pathway",
-    gene_names %in% top_neighbors                  ~ "extended set",
-    TRUE                                           ~ "unknown"
+    seed_condition                            ~ "seed",
+    gene_names %in% available_pathway_genes  ~ "pathway",
+    gene_names %in% top_neighbors            ~ "extended set",
+    TRUE                                     ~ "unknown"
   )
   
   hits_result  <- hits_scores(g, scale = TRUE)

@@ -8,9 +8,10 @@ plot_subtype_hub_scores(
   node_metrics = NULL,
   top_n = 30,
   hub_direction = c("up", "down"),
-  order_by = c("hub_score", "alphabetical", "none"),
+  select_by = c("hub_score", "delta"),
+  order_by = c("hub_score", "delta", "alphabetical", "none"),
+  scale_per_subtype = TRUE,
   color_low = "#FFF5E6",
-  color_mid = "#E85D04",
   color_high = "#370617",
   title = NULL,
   fontsize_row = 10,
@@ -26,22 +27,37 @@ plot_subtype_hub_scores(
 \code{<subtype>_hub_score} columns as produced by
 \code{calculate_subtype_hub_scores()}. Must also contain a \code{name}
 column. An \code{origin} column is optional but, if present, gene names
-are coloured by origin: \code{"seed"} = red, \code{"pathway"} = green,
-\code{"extended set"} = blue.}
+are coloured by origin: \code{"seed"} = red, \code{"pathway"} = orange,
+\code{"extended set"} = teal.}
 
-\item{top_n}{Integer. Number of genes to display, selected by the highest
-(or lowest, when \code{hub_direction = "down"}) hub score across all
-subtypes. Defaults to \code{30}.}
+\item{top_n}{Integer. Number of genes to display. Which genes are selected
+is controlled by \code{select_by}. Defaults to \code{30}.}
 
 \item{hub_direction}{Character string. One of \code{"up"} (default) to show
 the genes with the highest positive hub scores, or \code{"down"} to show
 genes with the most negative hub scores (downregulated high-centrality
 genes).}
 
-\item{order_by}{Character string controlling column (gene) ordering. One of:
+\item{select_by}{Character string controlling which metric is used to pick
+the \code{top_n} genes. One of:
+\describe{
+\item{\code{"hub_score"}}{(Default) Select genes with the highest
+maximum hub score across subtypes — the most active overall hubs.}
+\item{\code{"delta"}}{Select genes with the largest difference between
+their top and second-highest absolute hub score — the most
+subtype-exclusive hubs. Requires \code{subtype_delta} to be present
+in \code{node_metrics} (computed by
+\code{calculate_subtype_hub_scores()}).}
+}}
+
+\item{order_by}{Character string controlling column (gene) ordering after
+selection. One of:
 \describe{
 \item{\code{"hub_score"}}{(Default) Ordered by descending maximum hub
 score across subtypes.}
+\item{\code{"delta"}}{Ordered by descending subtype-specificity delta.
+Genes unique to one subtype appear leftmost. Ties broken by
+descending maximum hub score.}
 \item{\code{"alphabetical"}}{Alphabetical by gene name.}
 \item{\code{"none"}}{Hierarchical clustering.}
 }}
@@ -49,9 +65,6 @@ score across subtypes.}
 \item{color_low}{Character. Hex colour for the low end of the
 upregulated (\code{hub_direction = "up"}) colour scale.
 Defaults to \code{"#FFF5E6"}.}
-
-\item{color_mid}{Character. Hex colour for the midpoint.
-Defaults to \code{"#E85D04"}.}
 
 \item{color_high}{Character. Hex colour for the high end.
 Defaults to \code{"#370617"}.}
@@ -68,14 +81,15 @@ Defaults to \code{11}.}
 \item{output_file}{Character string. Path to save the heatmap as a PDF.
 If \code{NULL} (default) the plot is drawn to the active device only.}
 
-\item{width}{Numeric. Width of the saved PDF in inches. Defaults to
-\code{10}.}
+\item{width}{Numeric. Width of the saved PDF in inches. Defaults to \code{10}.}
 
-\item{height}{Numeric. Height of the saved PDF in inches. Defaults to
-\code{8}.}
+\item{height}{Numeric. Height of the saved PDF in inches. Defaults to \code{8}.}
 
 \item{verbose}{Logical. If \code{TRUE} (default), messages about the
 detected subtypes and selected genes are printed.}
+
+\item{color_mid}{Character. Hex colour for the midpoint.
+Defaults to \code{"#E85D04"}.}
 }
 \value{
 A \code{Heatmap} object (invisibly). The heatmap is drawn to the

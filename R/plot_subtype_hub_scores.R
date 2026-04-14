@@ -74,8 +74,8 @@ plot_subtype_hub_scores <- function(node_metrics = NULL,
                                     hub_direction = c("up", "down"),
                                     select_by     = c("hub_score", "delta"),
                                     order_by      = c("hub_score", "delta", "alphabetical", "none"),
+                                    scale_per_subtype = TRUE,
                                     color_low  = "#FFF5E6",
-                                    color_mid  = "#E85D04",
                                     color_high = "#370617",
                                     title = NULL,
                                     fontsize_row = 10,
@@ -109,7 +109,21 @@ plot_subtype_hub_scores <- function(node_metrics = NULL,
   if(select_by == "delta" && !"subtype_delta" %in% colnames(node_metrics)){
     stop("select_by = 'delta' requires a 'subtype_delta' column. Run calculate_subtype_hub_scores() first...")
   }
-  
+
+  # deduplicate by gene name — keep row with highest absolute hub signal
+  # duplicate rows can cause inconsistent origin colour depending on sort order
+  hub_score_cols_pre <- grep("_hub_score$", colnames(node_metrics), value = TRUE)
+  if(any(duplicated(node_metrics$name))){
+    node_metrics <- node_metrics |>
+      dplyr::rowwise() |>
+      dplyr::mutate(.max_abs = max(abs(dplyr::c_across(dplyr::all_of(hub_score_cols_pre))), na.rm = TRUE)) |>
+      dplyr::ungroup() |>
+      dplyr::arrange(dplyr::desc(.max_abs)) |>
+      dplyr::distinct(name, .keep_all = TRUE) |>
+      dplyr::select(-.max_abs)
+    if(verbose) message(sprintf("  -> Deduplicated node_metrics to %d unique genes", nrow(node_metrics)))
+  }
+
   # auto-detect subtypes from <subtype>_hub_score columns
   hub_score_cols <- grep("_hub_score$", colnames(node_metrics), value = TRUE)
   subtypes       <- sub("_hub_score$", "", hub_score_cols)
@@ -196,65 +210,77 @@ plot_subtype_hub_scores <- function(node_metrics = NULL,
   names(gene_name_colours) <- colnames(hub_matrix)
   
   # column ordering
+  # gene_name_colours is intentionally NOT reordered here — ComplexHeatmap applies
+  # column_names_gp in original matrix column order (not display order), so keeping
+  # it aligned with top_genes / hub_matrix column order is correct.
   if(order_by == "alphabetical"){
-    col_order         <- order(colnames(hub_matrix))
-    cluster_cols      <- FALSE
-    gene_name_colours <- gene_name_colours[colnames(hub_matrix)[col_order]]
+    col_order    <- order(colnames(hub_matrix))
+    cluster_cols <- FALSE
     
   } else if(order_by == "hub_score"){
     if(hub_direction == "up"){
-      col_order <- order(top_genes$max_hub_score, decreasing = TRUE)
+      col_order <- rev(order(top_genes$max_hub_score, decreasing = TRUE))
     } else {
       col_order <- order(top_genes$min_hub_score, decreasing = FALSE)
     }
-    cluster_cols      <- FALSE
-    gene_name_colours <- gene_name_colours[colnames(hub_matrix)[col_order]]
+    cluster_cols <- FALSE
     
   } else if(order_by == "delta"){
     if(hub_direction == "up"){
-      col_order <- order(top_genes$sort_delta, top_genes$max_hub_score, decreasing = TRUE)
+      col_order <- rev(order(top_genes$subtype_delta, top_genes$max_hub_score, decreasing = TRUE))
     } else {
-      col_order <- order(top_genes$sort_delta, -top_genes$min_hub_score, decreasing = TRUE)
+      col_order <- order(top_genes$subtype_delta, -top_genes$min_hub_score, decreasing = TRUE)
     }
-    cluster_cols      <- FALSE
-    gene_name_colours <- gene_name_colours[colnames(hub_matrix)[col_order]]
+    cluster_cols <- FALSE
     if(verbose){
       message(sprintf("  -> Ordering by subtype delta (most unique gene: %s)",
                       colnames(hub_matrix)[col_order[1]]))
     }
     
   } else {
-    col_order         <- NULL
-    cluster_cols      <- TRUE
-    gene_name_colours <- gene_name_colours[colnames(hub_matrix)]
+    col_order    <- NULL
+    cluster_cols <- TRUE
   }
   
-  # colour scale
+  # colour scale — two-colour ramp anchored at 0
+  # up:   0 (low) → +max (high color)
+  # down: -max (high color) → 0 (low)
   if(hub_direction == "up"){
-    max_val  <- max(hub_matrix, na.rm = TRUE)
-    col_fun  <- circlize::colorRamp2(
-      c(0, max_val / 2, max_val),
-      c(color_low, color_mid, color_high)
-    )
-    legend_param <- list(
-      title     = "Hub Score",
-      at        = c(0, max_val / 2, max_val),
-      labels    = c("0", "Mid", "Max"),
-      direction = "vertical"
-    )
+    if(scale_per_subtype){
+      plot_matrix <- t(apply(hub_matrix, 1, function(x) {
+        rng <- range(x, na.rm = TRUE)
+        if(diff(rng) == 0) return(rep(0, length(x)))
+        (x - rng[1]) / diff(rng)
+      }))
+      col_fun <- circlize::colorRamp2(c(0, 1), c(color_low, color_high))
+      legend_param <- list(title = "Hub Score\n(per subtype)", at = c(0, 1),
+                           labels = c("Low", "High"), direction = "vertical")
+      if(verbose) message("  -> Colour scaled per subtype (scale_per_subtype = TRUE)")
+    } else {
+      plot_matrix <- hub_matrix
+      max_val <- max(hub_matrix, na.rm = TRUE)
+      col_fun <- circlize::colorRamp2(c(0, max_val), c(color_low, color_high))
+      legend_param <- list(title = "Hub Score", at = c(0, max_val),
+                           labels = c("0", round(max_val, 2)), direction = "vertical")
+    }
   } else {
-    min_val  <- min(hub_matrix, na.rm = TRUE)
-    mid_val  <- min_val / 2
-    col_fun  <- circlize::colorRamp2(
-      c(min_val, mid_val, 0),
-      c("#213C51", "#6594B1", "#FFF5E6")
-    )
-    legend_param <- list(
-      title     = "Hub Score",
-      at        = c(0, mid_val, min_val),
-      labels    = c("0", "Mid", "Min"),
-      direction = "vertical"
-    )
+    if(scale_per_subtype){
+      plot_matrix <- t(apply(hub_matrix, 1, function(x) {
+        rng <- range(x, na.rm = TRUE)
+        if(diff(rng) == 0) return(rep(0, length(x)))
+        (rng[2] - x) / diff(rng)   # flip: most negative → 1 (high color)
+      }))
+      col_fun <- circlize::colorRamp2(c(0, 1), c(color_low, color_high))
+      legend_param <- list(title = "Hub Score\n(per subtype)", at = c(0, 1),
+                           labels = c("Low", "High"), direction = "vertical")
+      if(verbose) message("  -> Colour scaled per subtype (scale_per_subtype = TRUE)")
+    } else {
+      plot_matrix <- hub_matrix
+      min_val <- min(hub_matrix, na.rm = TRUE)
+      col_fun <- circlize::colorRamp2(c(min_val, 0), c(color_high, color_low))
+      legend_param <- list(title = "Hub Score", at = c(min_val, 0),
+                           labels = c(round(min_val, 2), "0"), direction = "vertical")
+    }
   }
   
   # auto title
@@ -265,7 +291,7 @@ plot_subtype_hub_scores <- function(node_metrics = NULL,
   
   # build heatmap
   ht <- ComplexHeatmap::Heatmap(
-    hub_matrix,
+    plot_matrix,
     name                  = "Hub\nScore",
     col                   = col_fun,
     cluster_rows          = FALSE,
@@ -291,6 +317,6 @@ plot_subtype_hub_scores <- function(node_metrics = NULL,
     ComplexHeatmap::draw(ht, annotation_legend_list = if(!is.null(origin_legend)) list(origin_legend))
   }
   
-  invisible(ht)
+  invisible(list(heatmap = ht, legend = origin_legend))
   
 }

@@ -20,6 +20,7 @@ run_netweave(
   string_score_threshold = 900,
   string_data_dir = "data/string_db",
   genes_blacklist = NULL,
+  apply_blacklist = FALSE,
   low_expr_threshold = 0.25,
   sig_threshold = 0.05,
   tissue_filter = "either",
@@ -82,6 +83,9 @@ pre-downloaded STRING flat files. Defaults to \code{"data/string_db"}.}
 
 \item{genes_blacklist}{Optional character vector of gene symbols to exclude
 from neighbour expansion. Defaults to \code{NULL}.}
+
+\item{apply_blacklist}{Boolean flag, set to TRUE for removing ubiquitous cellular machinery
+(ribosomal proteins, histones, splicing factors, core translation factors). Default is FALSE.}
 
 \item{low_expr_threshold}{Numeric threshold for low-expression annotation.
 Values in (0, 1) are treated as a percentile; values >= 1 as an absolute
