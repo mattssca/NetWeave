@@ -12,22 +12,21 @@ dir.create("data/string_db", recursive = TRUE, showWarnings = FALSE)
 #========================================
 message("Downloading Reactome data...")
 
+dir.create("data/raw", recursive = TRUE, showWarnings = FALSE)
+
 download.file(
-  url = "https://reactome.org/download/current/Ensembl2Reactome.txt",
-  destfile = "data/raw/Ensembl2Reactome.txt"
+  url = "https://reactome.org/download/current/Ensembl2Reactome_All_Levels.txt",
+  destfile = "data/raw/Ensembl2Reactome_All_Levels.txt"
 )
 
-#read the data
-Ensembl2Reactome <- read.delim("data/raw/Ensembl2Reactome.txt", 
+Ensembl2Reactome <- read.delim("data/raw/Ensembl2Reactome_All_Levels.txt", 
                                header = FALSE, 
                                stringsAsFactors = FALSE)
 
 colnames(Ensembl2Reactome) <- c("gene_id", "pathway_id", "url", "pathway_name", "evidence", "species")
 
-#filter for human pathways only
 Ensembl2Reactome <- Ensembl2Reactome[Ensembl2Reactome$species == "Homo sapiens", ]
 
-#save object
 save(Ensembl2Reactome, file = "data/Ensembl2Reactome.Rdata")
 
 message("Reactome data saved!")
